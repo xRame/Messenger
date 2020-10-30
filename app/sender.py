@@ -1,13 +1,7 @@
 import requests
 
-url = 'http://127.0.0.1:5000/send'
-name = input('Введите имя: ')
-while  True:
-	text = input()
-	data = {
-		'name': name,
-		'text': text
-	}
-	response = requests.post(url, json = data)
+url = 'https://messengerpy-env-1.eba-rs4kjrzc.us-east-2.elasticbeanstalk.com/status'
+
+response = requests.get(url)
 	
 print(response.status_code)
