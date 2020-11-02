@@ -52,6 +52,6 @@ class Messenger(QtWidgets.QMainWindow, Ui_Messenger):
         self.messageinput.repaint()
 
 app = QtWidgets.QApplication([])
-window = Messenger('http://127.0.0.1:5000')
+window = Messenger('http://messengerpy-env-1.eba-rs4kjrzc.us-east-2.elasticbeanstalk.com')
 window.show()
 app.exec_()

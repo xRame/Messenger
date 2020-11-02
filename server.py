@@ -1,9 +1,20 @@
 from flask import Flask, request
+from sqlalchemy import create_engine
+import pymysql
+import pandas as pd
 import time
+import hashlib
 
 app = Flask(__name__)
 db = []
 db_users = {'login':{'email':'email','password':'password','id':'1'}}
+
+db_connection = 'mysql+pymysql://artemkmp_web:*Lo02Kal@artemkmp.beget.tech/artemkmp_web'
+conn = create_engine(db_connection)
+
+df = pd.read_sql("SELECT * FROM users", conn)
+ 
+print ("connect successful!!")
 
 @app.route("/")
 def hello():
@@ -20,26 +31,27 @@ def status():
 @app.route("/login", methods = ['POST'])
 def login():
 	data = request.json
-	print('login with')
+	print('login with',end = ' ')
 	print(data['login'])
-	if data['login'] in db_users:
-		if data['password'] == db_users[data['login']]['password']:
-			return{
-				  "status":"ok",
-				  "description":"ok",
-				  "userId":"",
-				  "token": ""
-				}
-		else:
-			return{
-				  "status":"error",
-				  "description":"wrong password"
-				}	
-	else: 	
-		return{
-				  "status":"error",
-				  "description":"login not found"
-				}	
+	for l in df['login']:
+		print(l)
+		if data['login'] == l:
+			if str(hashlib.md5(data['password'].encode()).hexdigest() == df[df['login'].str.contains(data['login'])]['token'])[5] =='T':
+				return{
+					  "status":"ok",
+					  "description":"ok",
+					  "userId":"",
+					  "token": ""
+					}
+			else:
+				return{
+					  "status":"error",
+					  "description":"wrong password"
+					}		
+	return{
+			  "status":"error",
+			  "description":"login not found"
+			}	
 
 @app.route("/register", methods = ['POST'])
 def register():
@@ -88,5 +100,4 @@ def messages():
 
 	return{'messages':db[after_id:after_id+limit]}	
 
-print(db_users.keys())
 app.run(host = '0.0.0.0', port=5000)	
