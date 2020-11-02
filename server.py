@@ -18,7 +18,7 @@ print ("connect successful!!")
 
 @app.route("/")
 def hello():
-	return "Hello  v 1.1"
+	return "Hello  v 1.4"
 
 @app.route("/status")
 def status():
@@ -31,17 +31,18 @@ def status():
 @app.route("/login", methods = ['POST'])
 def login():
 	data = request.json
-	print('login with',end = ' ')
-	print(data['login'])
+	# print('login with',end = ' ')
+	# print(data['login'])
 	for l in df['login']:
-		print(l)
 		if data['login'] == l:
-			if str(hashlib.md5(data['password'].encode()).hexdigest() == df[df['login'].str.contains(data['login'])]['token'])[5] =='T':
+			password_enter = hashlib.md5(data['password'].encode()).hexdigest()
+			password = df.loc[df['login'].str.contains('Anon'), 'token'].iloc[0]
+			if (password_enter == password):
 				return{
 					  "status":"ok",
 					  "description":"ok",
-					  "userId":"",
-					  "token": ""
+					  "userId":str(df.loc[df['login'].str.contains(data['login']),'id'].iloc[0]),
+					  "token": password_enter
 					}
 			else:
 				return{
@@ -99,5 +100,11 @@ def messages():
 	limit = 100
 
 	return{'messages':db[after_id:after_id+limit]}	
+
+@app.after_request
+def apply_caching(response):
+    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With"
+    return response
 
 app.run(host = '0.0.0.0', port=5000)	
