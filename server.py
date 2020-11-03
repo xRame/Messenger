@@ -4,10 +4,11 @@ import pymysql
 import pandas as pd
 import time
 import hashlib
+import numpy
+import datetime
 
 app = Flask(__name__)
 db = []
-db_users = {'login':{'email':'email','password':'password','id':'1'}}
 
 db_connection = 'mysql+pymysql://artemkmp_web:*Lo02Kal@artemkmp.beget.tech/artemkmp_web'
 conn = create_engine(db_connection)
@@ -18,7 +19,7 @@ print ("connect successful!!")
 
 @app.route("/")
 def hello():
-	return "Hello  v 1.4"
+	return "Hello  v 1.5"
 
 @app.route("/status")
 def status():
@@ -36,13 +37,13 @@ def login():
 	for l in df['login']:
 		if data['login'] == l:
 			password_enter = hashlib.md5(data['password'].encode()).hexdigest()
-			password = df.loc[df['login'].str.contains('Anon'), 'token'].iloc[0]
+			password = df.loc[df['login'].str.contains(data['login']), 'token'].iloc[0]
 			if (password_enter == password):
 				return{
 					  "status":"ok",
 					  "description":"ok",
 					  "userId":str(df.loc[df['login'].str.contains(data['login']),'id'].iloc[0]),
-					  "token": password_enter
+					  "token": str(password_enter)
 					}
 			else:
 				return{
@@ -57,26 +58,41 @@ def login():
 @app.route("/register", methods = ['POST'])
 def register():
 	data = request.json
-	if data['login'] in db_users:
+	print(data['login'])
+	print(data['email'])
+	print(data['password'])
+	for l in df['login']:
+		if data['login'] == l:
+			return{
+				  "status":"error",
+				  "description":"login is already taken"
+				}
+	for l in df['email']:
+		if data['email'] == l:
+			return{
+				  "status":"error",
+				  "description":"email is already taken"
+				}			
+	if len(data['password']) < 4:
 		return{
-			  "status":"error",
-			  "description":"login is already taken"
-			}
-	# elif data['email'] in db_users.keys():
-	# 	return{
-	# 		  "status":"error",
-	# 		  "description":"email is already taken"
-	# 		}
-	else:
-		db_users.update({
-			data['login']:{'email':data['email'],'password':data['password']}
-		})
-		
-		return{
+				  "status":"error",
+				  "description":"password must be more than four characters"
+				}
+	today = datetime.datetime.today()
+	idp = df.iloc[-1,0]
+	image = 'None'
+	login = data['login']
+	email = data['email']
+	lastActivity = today.strftime("%Y-%m-%d %H:%M")
+	token = hashlib.md5(data['password'].encode()).hexdigest()
+	data = {'avatarUrl':[image], 'login':[login], 'email':[email], 'lastActivity':[lastActivity], 'token':[token]}
+	dfn = pd.DataFrame(data)
+	dfn.to_sql(con=conn, name='users', if_exists='append', index = False)
+	df.loc[idp] = {'id':idp+1, 'avatarUrl':image, 'login':login, 'email':email, 'lastActivity':lastActivity, 'token':token}
+	return{
 				  "status":"ok",
-				  "description":""
-				}	
-
+				  "description":"ok"
+				}
 @app.route("/send", methods = ['POST'])
 def send():
 	data = request.json
