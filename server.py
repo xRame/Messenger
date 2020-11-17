@@ -6,6 +6,10 @@ import time
 import hashlib
 import numpy
 import datetime
+import smtplib
+import random
+import string
+
 
 app = Flask(__name__)
 db = []
@@ -14,12 +18,22 @@ db_connection = 'mysql+pymysql://artemkmp_web:*Lo02Kal@artemkmp.beget.tech/artem
 conn = create_engine(db_connection)
 
 df = pd.read_sql("SELECT * FROM users", conn)
- 
+app.debug = True
+app.SECURITY_EMAIL_SENDER = 'messengerweb1@gmail.com'
+
+MAIL_DEBUG = 1 
+SECURITY_EMAIL_SENDER = 'messengerweb1@gmail.com'
+smtpObj = smtplib.SMTP('smtp.gmail.com', 587)
+smtpObj.starttls()
+smtpObj.login('messengerweb1@gmail.com','lFCMnO3H')
+# smtpObj.connect('smtp.gmail.com')
+
+
 print ("connect successful!!")
 
 @app.route("/")
 def hello():
-	return "Hello  v 1.5"
+	return "Hello  v 1.91"
 
 @app.route("/status")
 def status():
@@ -93,6 +107,59 @@ def register():
 				  "status":"ok",
 				  "description":"ok"
 				}
+
+@app.route("/restore", methods = ['POST'])
+def restore():
+	data = request.json
+	login = data['login']
+
+	new_password = data['password']
+	new_password_hashed =  hashlib.md5(new_password.encode()).hexdigest()
+	df.loc[df['login'].str.contains(login), 'token'] = new_password_hashed
+	id_user = int(df.loc[df['login'].str.contains(login), 'id'].iloc[0])
+	try:
+		conn.execute("UPDATE users SET token = %s WHERE id=%s",(new_password_hashed, id_user))
+	except(sqlalchemy.exc.OperationalError):
+		print('hello')
+	return{
+				  "status":"ok",
+				  "description":"ok"
+				}
+
+@app.route("/forget", methods = ['POST'])
+def forget():
+	data = request.json
+	login = data['login']
+	for l in df['login']:
+		if login == l:
+			id_user = int(df.loc[df['login'].str.contains(login), 'id'].iloc[0])
+			new_password = ''.join(random.choice(string.ascii_letters) for _ in range(8))
+			new_password_hashed =  hashlib.md5(new_password.encode()).hexdigest()
+			df.loc[df['login'].str.contains(login), 'token'] = new_password_hashed
+			FROM = 'messengerweb1@gmail.com'
+			SUBJECT = "Restore password"
+			TO = df.loc[df['login'].str.contains(login), 'email'].iloc[0]
+			text = "Your new password: " + new_password
+
+			BODY = "\r\n".join((
+			    "From: %s" % FROM,
+			    "To: %s" % TO,
+			    "Subject: %s" % SUBJECT ,
+			    "",
+			    text
+			))
+			smtpObj.sendmail(FROM,TO,BODY)
+			conn.execute("UPDATE users SET token = %s WHERE id=%s",(new_password, id_user))
+			return{
+						  "status":"ok",
+						  "description":"ok"
+						}
+
+	return{
+				  "status":"error",
+				  "description":"login does not exist"
+				}			
+
 @app.route("/send", methods = ['POST'])
 def send():
 	data = request.json
@@ -118,7 +185,7 @@ def messages():
 	return{'messages':db[after_id:after_id+limit]}	
 
 @app.after_request
-def apply_caching(response):
+def after_request(response):
     response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With"
     return response
