@@ -33,7 +33,7 @@ print ("connect successful!!")
 
 @app.route("/")
 def hello():
-	return "Hello  v 1.91"
+	return "Hello  v 1.92"
 
 @app.route("/status")
 def status():
@@ -173,6 +173,104 @@ def send():
 		})
 	return{'ok':True}
 
+@app.route("/chats", methods = ['POST'])
+def getChats():
+	data = request.json
+	user_id = data['id']
+	cm = pd.read_sql("SELECT * FROM chatMembers WHERE user_id="+str(user_id), conn)
+	# print(cm.chat_id)
+	json = {}
+	for i in range(len(cm.chat_id)):
+		data = {}
+		chat_id = str(cm.chat_id[i])
+		# chat_id = '7'
+		chatInfo = pd.read_sql("SELECT * FROM chatInfo WHERE chat_id="+chat_id, conn)
+		messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chat_id, conn)
+		lastSeen = pd.read_sql("SELECT * FROM lastSeen WHERE chat_id="+chat_id, conn)
+		chats = pd.read_sql("SELECT * FROM chats WHERE id="+str(chat_id), conn)
+		print(chat_id,'\n')
+		try:
+			type_chat = int(chats.loc[0, 'type'])
+			if type_chat == 0:
+				cm1 = pd.read_sql("SELECT * FROM chatMembers WHERE chat_id="+str(chat_id), conn)
+				if cm1.user_id[0] == user_id:
+					user = pd.read_sql("SELECT * FROM users WHERE id="+str(int(cm1.user_id[1])), conn)
+					image = user.loc[0, 'avatarUrl']
+					name = user.loc[0, 'login']	
+					
+				else:
+					user = pd.read_sql("SELECT * FROM users WHERE id="+str(cm1.user_id[0]), conn)	
+					image = user.loc[0, 'avatarUrl']
+					name = user.loc[0, 'login']	
+				
+			else:
+				try:
+					image = chatInfo.loc[0, 'avatarUrl']
+				except:
+					image = 'None'
+				name = chatInfo.loc[0, 'name']
+			try:	
+				text = messages[-1:].text.iloc[0]
+				date =  messages[-1:].date.iloc[0]
+			except:
+				text = 'Чат пуст'	
+				date = 'None'
+			last = lastSeen.loc[0, 'time']
+			
+		except:
+			print('err')
+			continue
+
+		data = {'image':image,'name':name,'text':text,'date':date,'last':last,'chat_id':chat_id,'type_chat':type_chat}
+		json.update({chat_id:data})
+	return json
+
+@app.route("/getBlockedUsers", methods = ['POST'])
+def getBlockedUsers():
+	data = request.json
+	user_id = data['id']
+	cm = pd.read_sql("SELECT * FROM usersBlackList WHERE user_id="+str(user_id), conn)
+	# print(cm)
+	json = {}
+	for i in range(len(cm.blocked_user_id)):
+		blocked_user_id = str(cm.blocked_user_id[i])
+		userInfo = pd.read_sql("SELECT * FROM users WHERE id="+blocked_user_id, conn)
+		try:
+			avatarUrl = userInfo.loc[0, 'avatarUrl']
+			login = userInfo.loc[0, 'login']
+			lastActivity = userInfo.loc[0, 'lastActivity']
+		except:
+			continue
+		data = {'login':login, 'avatarUrl':avatarUrl, 'userId':blocked_user_id, 'lastActivity':lastActivity}
+		json.update({blocked_user_id:data})
+		# print(blocked_user_id)
+		# print(avatarUrl)
+		# print(login)
+		# print(lastActivity)
+		# print(json)
+	return json	
+
+@app.route("/findUser", methods = ['POST'])
+def findUser():
+	data = request.json
+	user_login = data['login']
+	users = pd.read_sql("SELECT * FROM users WHERE login LIKE '%"+str(user_login)+"%'", conn)
+	if len(users) == 0:
+		return{"status":"error",
+				"description":"login not found"}
+	json = {}
+	for i in range(len(users)):
+		data = {}
+		login = users.loc[i, 'login']
+		avatarUrl = users.loc[i, 'avatarUrl']
+		userId = str(users.loc[i, 'id'])
+		lastActivity = users.loc[i, 'lastActivity']
+		data = {'login':login,'avatarUrl':avatarUrl,'userId':userId,'lastActivity':lastActivity}
+		json.update({userId:data})
+
+	return json
+
+
 @app.route("/messages")
 def messages():
 	if 'after_id' in request.args:
@@ -181,7 +279,6 @@ def messages():
 		after_id = 0	
 
 	limit = 100
-
 	return{'messages':db[after_id:after_id+limit]}	
 
 @app.after_request
@@ -189,5 +286,15 @@ def after_request(response):
     response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With"
     return response
+
+@app.before_request
+def before_request():
+	data = request.json
+	try:
+		user_id = data['id']
+	except:
+		login = data['login']
+	time = today.strftime("%Y-%m-%d %H:%M")
+	print(data)
 
 app.run(host = '0.0.0.0', port=5000)	
