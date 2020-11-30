@@ -97,4 +97,6 @@ def findUser(user_login):
 # data = {'user_id':['1'], 'blocked_user_id':['28']}
 # dfn = pd.DataFrame(data)
 # dfn.to_sql(con=conn, name='usersBlackList', if_exists='append', index = False)
-print(df)
+
+userInfo = pd.read_sql("SELECT * FROM users WHERE login = 'Venne'", conn)
+print(userInfo)

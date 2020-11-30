@@ -149,7 +149,7 @@ def forget():
 			    text
 			))
 			smtpObj.sendmail(FROM,TO,BODY)
-			conn.execute("UPDATE users SET token = %s WHERE id=%s",(new_password, id_user))
+			conn.execute("UPDATE users SET token = %s WHERE id=%s",(new_password_hashed, id_user))
 			return{
 						  "status":"ok",
 						  "description":"ok"
@@ -290,11 +290,16 @@ def after_request(response):
 @app.before_request
 def before_request():
 	data = request.json
+	today = datetime.datetime.today()
+	time = today.strftime("%Y-%m-%d %H:%M")
 	try:
 		user_id = data['id']
+		conn.execute("UPDATE users SET lastActivity = %s WHERE id=%s",(time, user_id))
 	except:
+		pass
+	try:
 		login = data['login']
-	time = today.strftime("%Y-%m-%d %H:%M")
-	print(data)
-
+		conn.execute("UPDATE users SET lastActivity = %s WHERE login=%s",(time, login))
+	except:
+		pass	
 app.run(host = '0.0.0.0', port=5000)	
