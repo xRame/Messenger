@@ -33,7 +33,7 @@ print ("connect successful!!")
 
 @app.route("/")
 def hello():
-	return "Hello  v 1.92"
+	return "Hello  v 1.94"
 
 @app.route("/status")
 def status():
@@ -191,24 +191,39 @@ def getChats():
 		print(chat_id,'\n')
 		try:
 			type_chat = int(chats.loc[0, 'type'])
+			skip = 0
 			if type_chat == 0:
 				cm1 = pd.read_sql("SELECT * FROM chatMembers WHERE chat_id="+str(chat_id), conn)
-				if cm1.user_id[0] == user_id:
-					user = pd.read_sql("SELECT * FROM users WHERE id="+str(int(cm1.user_id[1])), conn)
+				block = pd.read_sql("SELECT * FROM usersBlackList WHERE user_id="+str(user_id), conn)
+				if str(cm1.user_id[0]) == user_id:
+					for i in range(len(block.blocked_user_id)):
+						if str(cm1.user_id[1]) == str(block.blocked_user_id[i]):
+							skip = 1 
+					if skip == 1:
+						print('skip')
+						continue		
+					user = pd.read_sql("SELECT * FROM users WHERE id="+str(cm1.user_id[1]), conn)
 					image = user.loc[0, 'avatarUrl']
 					name = user.loc[0, 'login']	
-					
+					online = user.loc[0, 'lastActivity']	
 				else:
+					for i in range(len(block.blocked_user_id)):
+						if str(cm1.user_id[0]) == str(block.blocked_user_id[i]):
+							skip = 1 
+					if skip == 1:
+						print('skip')
+						continue		
 					user = pd.read_sql("SELECT * FROM users WHERE id="+str(cm1.user_id[0]), conn)	
 					image = user.loc[0, 'avatarUrl']
 					name = user.loc[0, 'login']	
-				
+					online = user.loc[0, 'lastActivity']
 			else:
 				try:
 					image = chatInfo.loc[0, 'avatarUrl']
 				except:
 					image = 'None'
 				name = chatInfo.loc[0, 'name']
+				online = 'None'
 			try:	
 				text = messages[-1:].text.iloc[0]
 				date =  messages[-1:].date.iloc[0]
@@ -221,9 +236,76 @@ def getChats():
 			print('err')
 			continue
 
-		data = {'image':image,'name':name,'text':text,'date':date,'last':last,'chat_id':chat_id,'type_chat':type_chat}
+		data = {'image':image,'name':name,'text':text,'date':date,'last':last,'chat_id':chat_id,'type_chat':type_chat,'online':online}
 		json.update({chat_id:data})
 	return json
+
+@app.route("/getNote", methods = ['POST'])
+def getNote():
+	data = request.json
+	user_id = data['id']
+	login = data['noted_user_login']
+	noted_user_id = str(pd.read_sql("SELECT id FROM users WHERE login = '"+str(login)+"'", conn).loc[0, 'id'])
+	try:
+		note = str(pd.read_sql("SELECT note_content FROM userNote WHERE author_user_id="+str(user_id)+" AND about_user_id="+noted_user_id, conn).loc[0, 'note_content'])
+	except:
+		print('except')
+		return{
+		'note':'NONE'
+	}
+	# print(user_id)
+	# print(noted_user_id)
+	return{
+		'note': note
+	}
+@app.route("/addNote", methods = ['POST'])
+def addNote():
+	data = request.json
+	user_id = data['id']
+	login = data['noted_user_login']
+	note = data['note']
+	noted_user_id = str(pd.read_sql("SELECT id FROM users WHERE login = '"+str(login)+"'", conn).loc[0, 'id'])
+	try:
+		note_1 = str(pd.read_sql("SELECT note_content FROM userNote WHERE author_user_id="+str(user_id)+" AND about_user_id="+noted_user_id, conn).loc[0, 'note_content'])
+	except:
+		data = {'about_user_id':[noted_user_id], 'author_user_id':[user_id],'note_content':[note]}
+		dfn = pd.DataFrame(data)
+		dfn.to_sql(con=conn, name='userNote', if_exists='append', index = False)
+		return{
+		  "status":"ok",
+		  "description":"note added"
+		}
+	conn.execute("UPDATE userNote SET note_content = %s WHERE author_user_id=%s AND about_user_id=%s",(note, user_id, noted_user_id))
+	return{
+		  "status":"ok",
+		  "description":"note changed"
+		}
+
+@app.route("/addBlockedUsers", methods = ['POST'])
+def addBlockedUsers():
+	data = request.json
+	user_id = data['id']
+	name = data['blocked_user_login']
+	blocked_user_id = str(pd.read_sql("SELECT id FROM users WHERE login = '"+str(name)+"'", conn).loc[0, 'id'])
+	data = {'user_id':[user_id], 'blocked_user_id':[blocked_user_id]}
+	dfn = pd.DataFrame(data)
+	dfn.to_sql(con=conn, name='usersBlackList', if_exists='append', index = False)
+	return{
+		  "status":"ok",
+		  "description":"ok"
+		}
+
+@app.route("/removeBlockedUsers", methods = ['POST'])
+def removeBlockedUsers():
+	data = request.json
+	user_id = data['id']
+	name = data['blocked_user_login']
+	blocked_user_id = str(pd.read_sql("SELECT id FROM users WHERE login = '"+str(name)+"'", conn).loc[0, 'id'])
+	conn.execute("DELETE FROM usersBlackList WHERE user_id=%s AND blocked_user_id=%s",(user_id, blocked_user_id))
+	return{
+	  "status":"ok",
+	  "description":"ok"
+	}
 
 @app.route("/getBlockedUsers", methods = ['POST'])
 def getBlockedUsers():
