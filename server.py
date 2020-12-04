@@ -12,7 +12,6 @@ import string
 
 
 app = Flask(__name__)
-db = []
 
 db_connection = 'mysql+pymysql://artemkmp_web:*Lo02Kal@artemkmp.beget.tech/artemkmp_web'
 conn = create_engine(db_connection)
@@ -160,19 +159,6 @@ def forget():
 				  "description":"login does not exist"
 				}			
 
-@app.route("/send", methods = ['POST'])
-def send():
-	data = request.json
-	
-	db.append({
-		'id':len(db),
-		'name': data['name'],
-		'text': data['text'],
-		'timestamp': time.time()
-
-		})
-	return{'ok':True}
-
 @app.route("/chats", methods = ['POST'])
 def getChats():
 	data = request.json
@@ -230,7 +216,10 @@ def getChats():
 			except:
 				text = 'Чат пуст'	
 				date = 'None'
-			last = lastSeen.loc[0, 'time']
+			try:	
+				last = lastSeen.loc[0, 'time']
+			except:
+				last = 'New'
 			
 		except:
 			print('err')
@@ -239,6 +228,68 @@ def getChats():
 		data = {'image':image,'name':name,'text':text,'date':date,'last':last,'chat_id':chat_id,'type_chat':type_chat,'online':online}
 		json.update({chat_id:data})
 	return json
+
+@app.route("/addChat", methods = ['POST'])
+def addChat():
+	data = request.json
+	user_id = data['id']
+	name = data['name']
+	users = data['users']
+	for_chats = {'owner_id':[user_id], 'type':[1]}
+	dfn = pd.DataFrame(for_chats)
+	dfn.to_sql(con=conn, name='chats', if_exists='append', index = False)
+
+	chat_id = str(pd.read_sql("SELECT * FROM chats ORDER BY ID DESC LIMIT 1", conn).loc[0, 'id'])
+
+	for_chatInfo = {'chat_id':chat_id,'name':[name], 'avatarUrl':['None']}
+	dfn = pd.DataFrame(for_chatInfo)
+	dfn.to_sql(con=conn, name='chatInfo', if_exists='append', index = False)
+	new_users = []
+	for i in range(len(users)):
+		new_users.append(str(pd.read_sql("SELECT id FROM users WHERE login = '"+users[i]+"'", conn).loc[0, 'id']))
+	new_users.append(user_id)
+	users = new_users	
+	print(new_users)
+	for i in range(len(users)):
+		is_admin = 0
+		if users[i]==user_id:
+			is_admin = 1
+		for_chatMembers = {'chat_id':[chat_id], 'user_id':[users[i]], 'is_admin':[is_admin]}
+		dfn = pd.DataFrame(for_chatMembers)
+		dfn.to_sql(con=conn, name='chatMembers', if_exists='append', index = False)
+	return{
+	  "name": name,
+	  "chatId": chat_id,
+	  "chatType": 1
+	}
+
+@app.route("/addPrivateChat", methods = ['POST'])
+def addPrivateChat():
+	data = request.json
+	user_id = data['id']
+	name = data['login']
+	user = str(pd.read_sql("SELECT id FROM users WHERE login = '"+name+"'", conn).loc[0, 'id'])
+	
+	for_chats = {'owner_id':[user_id], 'type':[0]}
+	dfn = pd.DataFrame(for_chats)
+	dfn.to_sql(con=conn, name='chats', if_exists='append', index = False)
+
+	chat_id = str(pd.read_sql("SELECT * FROM chats ORDER BY ID DESC LIMIT 1", conn).loc[0, 'id'])
+
+	for_chatInfo = {'chat_id':chat_id,'name':[name], 'avatarUrl':['None']}
+	dfn = pd.DataFrame(for_chatInfo)
+	dfn.to_sql(con=conn, name='chatInfo', if_exists='append', index = False)
+
+	users = [user_id ,user]
+	for i in range(len(users)):
+		for_chatMembers = {'chat_id':[chat_id], 'user_id':[users[i]], 'is_admin':[0]}
+		dfn = pd.DataFrame(for_chatMembers)
+		dfn.to_sql(con=conn, name='chatMembers', if_exists='append', index = False)
+	return{
+	  "name": name,
+	  "chatId": chat_id,
+	  "chatType": 1
+	}
 
 @app.route("/getNote", methods = ['POST'])
 def getNote():
@@ -258,6 +309,7 @@ def getNote():
 	return{
 		'note': note
 	}
+
 @app.route("/addNote", methods = ['POST'])
 def addNote():
 	data = request.json
@@ -352,16 +404,71 @@ def findUser():
 
 	return json
 
+@app.route("/newMessage", methods = ['POST'])
+def newMessage():
+	today = datetime.datetime.today()
+	time = today.strftime("%Y-%m-%d %H:%M")
+	data = request.json
+	user_id = data['id']
+	text = data['message']
+	chatId = data['chatId']
+	data = {'text':[text], 'date':[time],'user_id':[user_id],'chat_id':[chatId]}
+	dfn = pd.DataFrame(data)
+	dfn.to_sql(con=conn, name='messages', if_exists='append', index = False)
+	return{
+	  "status":"ok",
+	  "description":"ok"
+	}
 
-@app.route("/messages")
-def messages():
-	if 'after_id' in request.args:
-		after_id = int(request.args['after_id'])+1
-	else:
-		after_id = 0	
+@app.route("/getMessages", methods = ['POST'])
+def getMessages():
+	data = request.json
+	user_id = data['id']
+	chatId = data['chatId']
+	page = int(data['page'])
+	json = {}
+	messages_list = []
+	try:
+		if page == 0:
+			messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chatId, conn)[-20:]
+		else:
+			messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chatId, conn)[-2*(page+1):-2*page]
+	except:
+		return{"status":"error",
+				"description":"empty chat"}
+	for i in range(len(messages)):
+		message_id = str(messages.loc[i, 'id'])
+		message = messages.loc[i, 'text']
+		timestamp = messages.loc[i, 'date']
+		id_user = str(messages.loc[i, 'user_id'])
+		user = pd.read_sql("SELECT * FROM users WHERE id="+id_user, conn)
+		name = user.loc[0, 'login']
+		avatarUrl = user.loc[0, 'avatarUrl']
+		mes = {
+		"id": message_id,
+	      "user": {
+	        "id": id_user,
+	        "name": name,
+	        "avatarUrl": avatarUrl
+	      },
+	      "message": message,
+	      "timestamp": timestamp
+	    }
+		messages_list.append(mes)
 
-	limit = 100
-	return{'messages':db[after_id:after_id+limit]}	
+	data = {'page':page,
+	'messages':messages_list}
+	json.update(data)
+	return data
+
+@app.route("/getLastTime", methods = ['POST'])
+def getLastTime():
+	data = request.json
+	user_id = data['id']
+	time = pd.read_sql("SELECT lastActivity FROM users WHERE id="+user_id, conn).loc[0, 'lastActivity']
+	return{
+		'time':time
+	}
 
 @app.after_request
 def after_request(response):
@@ -384,4 +491,5 @@ def before_request():
 		conn.execute("UPDATE users SET lastActivity = %s WHERE login=%s",(time, login))
 	except:
 		pass	
+
 app.run(host = '0.0.0.0', port=5000)	

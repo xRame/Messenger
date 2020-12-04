@@ -98,5 +98,7 @@ def findUser(user_login):
 # dfn = pd.DataFrame(data)
 # dfn.to_sql(con=conn, name='usersBlackList', if_exists='append', index = False)
 name = 'Venne'
-userInfo = pd.read_sql("SELECT * FROM chatMembers WHERE chat_id=8", conn)
-print(userInfo.user_id[0] == '2')
+chats = pd.read_sql("SELECT * FROM chats", conn)
+page = 2
+messages = pd.read_sql("SELECT * FROM messages WHERE chat_id=7", conn)[-2*(page+1):-2*page]
+print(chats)
