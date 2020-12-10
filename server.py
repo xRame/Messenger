@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, url_for, render_template
 from sqlalchemy import create_engine
 import pymysql
 import pandas as pd
@@ -9,9 +9,11 @@ import datetime
 import smtplib
 import random
 import string
+import os
+import uuid
+from werkzeug.utils import secure_filename
 
-
-app = Flask(__name__)
+app = Flask(__name__,template_folder="tamplates")
 
 db_connection = 'mysql+pymysql://artemkmp_web:*Lo02Kal@artemkmp.beget.tech/artemkmp_web'
 conn = create_engine(db_connection)
@@ -27,8 +29,10 @@ smtpObj.starttls()
 smtpObj.login('messengerweb1@gmail.com','lFCMnO3H')
 # smtpObj.connect('smtp.gmail.com')
 
-
-print ("connect successful!!")
+serv =  'http://messengerpy-env-1.eba-rs4kjrzc.us-east-2.elasticbeanstalk.com/'
+local = 'http://127.0.0.1:5000/'
+picFolder = os.path.join('static', 'pics')
+app.config['UPLOAD_FOLDER'] = picFolder
 
 @app.route("/")
 def hello():
@@ -96,7 +100,7 @@ def register():
 	image = 'None'
 	login = data['login']
 	email = data['email']
-	lastActivity = today.strftime("%Y-%m-%d %H:%M")
+	lastActivity = today.strftime("%Y-%m-%d %H:%M:%S")
 	token = hashlib.md5(data['password'].encode()).hexdigest()
 	data = {'avatarUrl':[image], 'login':[login], 'email':[email], 'lastActivity':[lastActivity], 'token':[token]}
 	dfn = pd.DataFrame(data)
@@ -106,6 +110,27 @@ def register():
 				  "status":"ok",
 				  "description":"ok"
 				}
+
+@app.route("/postPhoto", methods = ['POST'])
+def postPhoto():
+	f = request.files['file']
+	save_father_path = 'static/pics'
+	name = str(uuid.uuid1()) + '.' + secure_filename(f.filename).split('.')[-1]
+	img_path = os.path.join(save_father_path, name)
+	if not os.path.exists(save_father_path):
+	    os.makedirs(save_father_path)
+	f.save(img_path)
+	# pic1 = os.path.join(app.config['UPLOAD_FOLDER'], name)
+	pic1 = local +'static/pics/' + name
+	return{
+	'url':pic1
+	}
+@app.route('/images/<img>')
+def getPhoto(img):
+	pic1 = os.path.join(app.config['UPLOAD_FOLDER'], img)
+	pic1 = local  + pic1
+	# pic1 = serv  + pic1
+	return render_template("getphoto1.html", user_image=pic1)   
 
 @app.route("/restore", methods = ['POST'])
 def restore():
@@ -407,7 +432,7 @@ def findUser():
 @app.route("/newMessage", methods = ['POST'])
 def newMessage():
 	today = datetime.datetime.today()
-	time = today.strftime("%Y-%m-%d %H:%M")
+	time = today.strftime("%Y-%m-%d %H:%M:%S")
 	data = request.json
 	user_id = data['id']
 	text = data['message']
@@ -426,6 +451,9 @@ def getMessages():
 	user_id = data['id']
 	chatId = data['chatId']
 	page = int(data['page'])
+	today = datetime.datetime.today()
+	time = today.strftime("%Y-%m-%d %H:%M:%S")
+	conn.execute("UPDATE lastSeen SET time = %s WHERE user_id=%s AND chat_id=%s",(time, user_id, chatId))
 	json = {}
 	messages_list = []
 	try:
@@ -480,16 +508,19 @@ def after_request(response):
 def before_request():
 	data = request.json
 	today = datetime.datetime.today()
-	time = today.strftime("%Y-%m-%d %H:%M")
+	time = today.strftime("%Y-%m-%d %H:%M:%S")
+	online = False
 	try:
 		user_id = data['id']
 		conn.execute("UPDATE users SET lastActivity = %s WHERE id=%s",(time, user_id))
+		online = True
 	except:
 		pass
-	try:
-		login = data['login']
-		conn.execute("UPDATE users SET lastActivity = %s WHERE login=%s",(time, login))
-	except:
-		pass	
+	if online == False:	
+		try:
+			login = data['login']
+			conn.execute("UPDATE users SET lastActivity = %s WHERE login=%s",(time, login))
+		except:
+			pass	
 
 app.run(host = '0.0.0.0', port=5000)	

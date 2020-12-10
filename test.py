@@ -9,6 +9,7 @@ import string
 import smtplib
 import json
 import traceback
+from flask import url_for
 # Подключиться к базе данных.
  
 db_connection = 'mysql+pymysql://artemkmp_web:*Lo02Kal@artemkmp.beget.tech/artemkmp_web'
@@ -97,8 +98,13 @@ def findUser(user_login):
 # data = {'user_id':['1'], 'blocked_user_id':['28']}
 # dfn = pd.DataFrame(data)
 # dfn.to_sql(con=conn, name='usersBlackList', if_exists='append', index = False)
-name = 'Venne'
-chats = pd.read_sql("SELECT * FROM chats", conn)
-page = 2
-messages = pd.read_sql("SELECT * FROM messages WHERE chat_id=7", conn)[-2*(page+1):-2*page]
-print(chats)
+
+files = {"file": ("test.jpg", open("test.jpg", "rb"))}
+# url = url_for('static', filename = 'test.jpg')
+r = requests.post("http://127.0.0.1:5000/postPhoto", files=files)
+
+print(r.text)
+# conn.execute("DELETE FROM chats WHERE id=25",)
+# users = pd.read_sql("SELECT * FROM lastSeen WHERE user_id=2 AND chat_id=8 ", conn)
+# print(users)
+# print(1)
