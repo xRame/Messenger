@@ -36,7 +36,7 @@ app.config['UPLOAD_FOLDER'] = picFolder
 
 @app.route("/")
 def hello():
-	return "Hello  v 1.94"
+	return "Hello  v 1.96"
 
 @app.route("/status")
 def status():
@@ -113,23 +113,29 @@ def register():
 
 @app.route("/postPhoto", methods = ['POST'])
 def postPhoto():
-	f = request.files['file']
-	save_father_path = 'static/pics'
-	name = str(uuid.uuid1()) + '.' + secure_filename(f.filename).split('.')[-1]
-	img_path = os.path.join(save_father_path, name)
-	if not os.path.exists(save_father_path):
-	    os.makedirs(save_father_path)
-	f.save(img_path)
-	# pic1 = os.path.join(app.config['UPLOAD_FOLDER'], name)
-	pic1 = local +'static/pics/' + name
-	return{
-	'url':pic1
-	}
+	try:
+		f = request.files['file']
+		save_father_path = 'static/pics'
+		name = str(uuid.uuid1()) + '.' + secure_filename(f.filename).split('.')[-1]
+		img_path = os.path.join(save_father_path, name)
+		if not os.path.exists(save_father_path):
+		    os.makedirs(save_father_path)
+		f.save(img_path)
+		# pic1 = os.path.join(app.config['UPLOAD_FOLDER'], name)
+		pic1 = serv +'static/pics/' + name
+		return{
+		'status':'ok',
+		'url': pic1
+		}
+	except:
+		return{
+		'status':'error'
+		}
 @app.route('/images/<img>')
 def getPhoto(img):
 	pic1 = os.path.join(app.config['UPLOAD_FOLDER'], img)
-	pic1 = local  + pic1
-	# pic1 = serv  + pic1
+	# pic1 = local  + pic1
+	pic1 = serv  + pic1
 	return render_template("getphoto1.html", user_image=pic1)   
 
 @app.route("/restore", methods = ['POST'])
@@ -184,6 +190,39 @@ def forget():
 				  "description":"login does not exist"
 				}			
 
+@app.route("/isNewMessages", methods = ['POST'])
+def isNewMessages():
+	data = request.json
+	user_id = data['secret_id']
+	cm = pd.read_sql("SELECT * FROM chatMembers WHERE user_id="+str(user_id), conn)
+	json = {}
+	for i in range(len(cm.chat_id)):
+		data = {}
+		chat_id = str(cm.chat_id[i])
+		messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chat_id, conn)
+		try:
+			date =  messages[-1:].date.iloc[0]
+		except:
+			continue
+		try:
+			lastSeen = pd.read_sql("SELECT time FROM lastSeen WHERE chat_id="+str(chat_id)+" AND user_id="+ str(user_id), conn).loc[0, 'time']
+		except:
+			lastSeen = datetime.datetime.strptime('2000-12-17 16:37:56',"%Y-%m-%d %H:%M:%S")
+		if date > lastSeen: 
+			text = messages[-1:].text.iloc[0]
+			if str(pd.read_sql("SELECT type FROM chats WHERE id="+str(chat_id), conn).loc[0,'type']) == '0':
+				user =  pd.read_sql("SELECT login FROM users WHERE id="+str(messages[-1:].user_id.iloc[0]), conn).loc[0, 'login']	
+				avatarUrl =  pd.read_sql("SELECT avatarUrl FROM users WHERE id="+str(messages[-1:].user_id.iloc[0]), conn).loc[0, 'avatarUrl']			
+			else:
+				user =  pd.read_sql("SELECT name FROM chatInfo WHERE chat_id="+str(messages[-1:].chat_id.iloc[0]), conn).loc[0, 'login']	
+				avatarUrl =  pd.read_sql("SELECT avatarUrl FROM chatInfo WHERE chat_id="+str(messages[-1:].chat_id.iloc[0]), conn).loc[0, 'avatarUrl']	
+
+			data = {'text':text,'date':date,'user':user,'avatarUrl':avatarUrl}
+			json.update({chat_id:data})
+
+	return json
+
+
 @app.route("/chats", methods = ['POST'])
 def getChats():
 	data = request.json
@@ -204,6 +243,7 @@ def getChats():
 			type_chat = int(chats.loc[0, 'type'])
 			skip = 0
 			if type_chat == 0:
+				is_admin = '0'
 				cm1 = pd.read_sql("SELECT * FROM chatMembers WHERE chat_id="+str(chat_id), conn)
 				block = pd.read_sql("SELECT * FROM usersBlackList WHERE user_id="+str(user_id), conn)
 				if str(cm1.user_id[0]) == user_id:
@@ -235,6 +275,7 @@ def getChats():
 					image = 'None'
 				name = chatInfo.loc[0, 'name']
 				online = 'None'
+				is_admin = str(pd.read_sql("SELECT is_admin FROM chatMembers WHERE chat_id="+str(chat_id)+" AND user_id="+ str(user_id), conn).loc[0, 'is_admin'])
 			try:	
 				text = messages[-1:].text.iloc[0]
 				date =  messages[-1:].date.iloc[0]
@@ -250,9 +291,32 @@ def getChats():
 			print('err')
 			continue
 
-		data = {'image':image,'name':name,'text':text,'date':date,'last':last,'chat_id':chat_id,'type_chat':type_chat,'online':online}
+		data = {'image':image,'name':name,'text':text,'date':date,'last':last,'chat_id':chat_id,'type_chat':type_chat,'online':online,'is_admin':is_admin}
 		json.update({chat_id:data})
 	return json
+
+@app.route("/setAvatar", methods = ['POST'])
+def setAvatar():
+	data = request.json
+	user_id = data['id']
+	avatarUrl = data['avatarUrl']
+	conn.execute("UPDATE users SET avatarUrl = %s WHERE id=%s",(avatarUrl, user_id))
+	return{
+		  "status":"ok",
+		  "description":"ok"
+		}
+
+@app.route("/setAvatarToGruop", methods = ['POST'])
+def setAvatarToGruop():
+	data = request.json
+	chat_id = data['chat_id']
+	avatarUrl = data['avatarUrl']
+	conn.execute("UPDATE chatInfo SET avatarUrl = %s WHERE chat_id=%s",(avatarUrl, chat_id))
+	return{
+		  "status":"ok",
+		  "description":"ok"
+		}
+
 
 @app.route("/addChat", methods = ['POST'])
 def addChat():
@@ -371,6 +435,69 @@ def addBlockedUsers():
 		  "status":"ok",
 		  "description":"ok"
 		}
+
+@app.route("/deleteFromGroup", methods = ['POST'])
+def deleteFromGroup():
+	data = request.json
+	user_id = data['user_id']
+	chat_id = data['chat_id']
+	conn.execute("DELETE FROM chatMembers WHERE chat_id=%s AND user_id = %s",(chat_id, user_id))
+	return{
+	  "status":"ok",
+	  "description":"ok"
+	}
+
+@app.route("/addMemeber", methods = ['POST'])
+def addMemeber():
+	data = request.json
+	user_id = data['user_id']
+	chat_id = data['chat_id']
+	is_admin = '0'
+	data = {'chat_id':[chat_id], 'user_id':[user_id],'is_admin':[is_admin]}
+	dfn = pd.DataFrame(data)
+	dfn.to_sql(con=conn, name='chatMembers', if_exists='append', index = False)
+	return{
+	  "status":"ok",
+	  "description":"ok"
+	}
+
+@app.route("/getUserInfo", methods = ['POST'])
+def getUserInfo():
+	data = request.json
+	user_id = data['user_id']
+	user = pd.read_sql("SELECT * FROM users WHERE id = '"+str(user_id)+"'", conn)
+	login = user.loc[0, 'login']
+	avatarUrl = user.loc[0, 'avatarUrl']
+	email = user.loc[0, 'email']
+	return{
+	   'id':user_id,
+	   'login':login,
+	   'avatarUrl':avatarUrl,
+	   'email':email
+	}
+
+@app.route("/getChatMembers", methods = ['POST'])
+def getChatMembers():
+	data = request.json
+	chat_id = data['chat_id']
+	chat = pd.read_sql("SELECT * FROM chatMembers WHERE chat_id = "+chat_id, conn)
+	logins = []
+	for user_id in chat.user_id:
+		login = pd.read_sql("SELECT login FROM users WHERE id = '"+str(user_id)+"'", conn).loc[0, 'login']
+		logins.append(login)
+	return{
+		'logins':logins
+	}	
+
+@app.route("/deleteMessage", methods = ['POST'])
+def deleteMessage():
+	data = request.json
+	message_id = data['message_id']
+	conn.execute("DELETE FROM messages WHERE id=%s",(message_id))
+	return{
+	  "status":"ok",
+	  "description":"ok"
+	}
 
 @app.route("/removeBlockedUsers", methods = ['POST'])
 def removeBlockedUsers():
