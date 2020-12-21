@@ -18,12 +18,14 @@ df = pd.read_sql("SELECT * FROM usersBlackList", conn)
 
 
 # conn.execute("DELETE FROM chats WHERE id=25",)
-chat_id = '8'
-user_id = '2'
-messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chat_id, conn)
-is_admin = pd.read_sql("SELECT time FROM lastSeen WHERE chat_id="+str(chat_id)+" AND user_id="+ str(user_id), conn).loc[0, 'time']
-date =  messages[-1:].date.iloc[0]
-print(date, is_admin)
-print(date > is_admin)
-t = datetime.datetime.strptime('2000-12-17 16:37:56',"%Y-%m-%d %H:%M:%S")
-print(t)
+logins = []
+for user_id in range(2):
+	login = 'login' + 'user_id'
+	avatarUrl = 'avatarUrl' + 'user_id'
+	data = {'login':login,'avatarUrl':avatarUrl}
+	logins.append(data)
+req = {
+	'users':logins
+}	
+
+print(req)

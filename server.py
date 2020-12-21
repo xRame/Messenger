@@ -484,9 +484,11 @@ def getChatMembers():
 	logins = []
 	for user_id in chat.user_id:
 		login = pd.read_sql("SELECT login FROM users WHERE id = '"+str(user_id)+"'", conn).loc[0, 'login']
-		logins.append(login)
+		avatarUrl = pd.read_sql("SELECT avatarUrl FROM users WHERE id = '"+str(user_id)+"'", conn).loc[0, 'avatarUrl']
+		data = {'login':login,'avatarUrl':avatarUrl}
+		logins.append(data)
 	return{
-		'logins':logins
+		'users':logins
 	}	
 
 @app.route("/deleteMessage", methods = ['POST'])
