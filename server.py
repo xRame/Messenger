@@ -214,12 +214,11 @@ def isNewMessages():
 				user =  pd.read_sql("SELECT login FROM users WHERE id="+str(messages[-1:].user_id.iloc[0]), conn).loc[0, 'login']	
 				avatarUrl =  pd.read_sql("SELECT avatarUrl FROM users WHERE id="+str(messages[-1:].user_id.iloc[0]), conn).loc[0, 'avatarUrl']			
 			else:
-				user =  pd.read_sql("SELECT name FROM chatInfo WHERE chat_id="+str(messages[-1:].chat_id.iloc[0]), conn).loc[0, 'login']	
+				user =  pd.read_sql("SELECT name FROM chatInfo WHERE chat_id="+str(messages[-1:].chat_id.iloc[0]), conn).loc[0, 'name']	
 				avatarUrl =  pd.read_sql("SELECT avatarUrl FROM chatInfo WHERE chat_id="+str(messages[-1:].chat_id.iloc[0]), conn).loc[0, 'avatarUrl']	
 
 			data = {'text':text,'date':date,'user':user,'avatarUrl':avatarUrl}
 			json.update({chat_id:data})
-
 	return json
 
 
@@ -439,7 +438,8 @@ def addBlockedUsers():
 @app.route("/deleteFromGroup", methods = ['POST'])
 def deleteFromGroup():
 	data = request.json
-	user_id = data['user_id']
+	name = data['name']
+	user_id = str(pd.read_sql("SELECT id FROM users WHERE login = '"+str(name)+"'", conn).loc[0, 'id'])
 	chat_id = data['chat_id']
 	conn.execute("DELETE FROM chatMembers WHERE chat_id=%s AND user_id = %s",(chat_id, user_id))
 	return{
@@ -447,15 +447,17 @@ def deleteFromGroup():
 	  "description":"ok"
 	}
 
-@app.route("/addMemeber", methods = ['POST'])
+@app.route("/addMember", methods = ['POST'])
 def addMemeber():
 	data = request.json
-	user_id = data['user_id']
+	user_login = data['user_login']
 	chat_id = data['chat_id']
 	is_admin = '0'
-	data = {'chat_id':[chat_id], 'user_id':[user_id],'is_admin':[is_admin]}
-	dfn = pd.DataFrame(data)
-	dfn.to_sql(con=conn, name='chatMembers', if_exists='append', index = False)
+	for user in user_login:
+		user_id = str(pd.read_sql("SELECT id FROM users WHERE login = '"+str(user)+"'", conn).loc[0, 'id'])
+		data = {'chat_id':[chat_id], 'user_id':[user_id],'is_admin':[is_admin]}
+		dfn = pd.DataFrame(data)
+		dfn.to_sql(con=conn, name='chatMembers', if_exists='append', index = False)
 	return{
 	  "status":"ok",
 	  "description":"ok"
@@ -566,6 +568,7 @@ def newMessage():
 	user_id = data['id']
 	text = data['message']
 	chatId = data['chatId']
+	conn.execute("UPDATE lastSeen SET time = %s WHERE user_id=%s AND chat_id=%s",(time, user_id, chatId))
 	data = {'text':[text], 'date':[time],'user_id':[user_id],'chat_id':[chatId]}
 	dfn = pd.DataFrame(data)
 	dfn.to_sql(con=conn, name='messages', if_exists='append', index = False)
@@ -586,14 +589,26 @@ def getMessages():
 	json = {}
 	messages_list = []
 	try:
+		messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chatId, conn)
+		print(messages)	
 		if page == 0:
-			messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chatId, conn)[-20:]
+			index = len(messages)-20
+			if index < 0:
+				index = 0
+			messages = messages[-20:]
+		elif page == -1:
+			index = 0
 		else:
-			messages = pd.read_sql("SELECT * FROM messages WHERE chat_id="+chatId, conn)[-2*(page+1):-2*page]
+			index = len(messages)-20*(page+1)
+			if index < 0:
+				index = 0
+			messages = messages[-20*(page+1):-20*page]
 	except:
 		return{"status":"error",
 				"description":"empty chat"}
-	for i in range(len(messages)):
+	print(index)
+		
+	for i in range(index,len(messages)+index):
 		message_id = str(messages.loc[i, 'id'])
 		message = messages.loc[i, 'text']
 		timestamp = messages.loc[i, 'date']
